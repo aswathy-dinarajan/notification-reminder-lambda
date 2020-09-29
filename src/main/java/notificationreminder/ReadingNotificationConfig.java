@@ -34,6 +34,12 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 
+/**
+ * If the AWS account is in sandbox mode both the sender and receiver emails should be verified in SES service. Once it is moved to production mode mails can be sent to unverified recipients
+ * In case of SMS depends on the countries the mobile number belongs the process of registering SenderIds varies.
+ * @author Aswathy
+ *
+ */
 
 public class ReadingNotificationConfig implements RequestHandler<Object, Object> {
 	Gson gson = new GsonBuilder().setPrettyPrinting().create();
