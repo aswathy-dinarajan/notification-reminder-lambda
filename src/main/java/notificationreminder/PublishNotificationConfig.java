@@ -5,31 +5,18 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-
-import com.amazonaws.regions.Regions;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-import com.amazonaws.services.simpleemail.AmazonSimpleEmailService;
-import com.amazonaws.services.simpleemail.AmazonSimpleEmailServiceClientBuilder;
-import com.amazonaws.services.simpleemail.model.Body;
-import com.amazonaws.services.simpleemail.model.Content;
-import com.amazonaws.services.simpleemail.model.Destination;
-import com.amazonaws.services.simpleemail.model.Message;
-import com.amazonaws.services.simpleemail.model.SendEmailRequest;
 import com.amazonaws.services.simplesystemsmanagement.AWSSimpleSystemsManagement;
 import com.amazonaws.services.simplesystemsmanagement.AWSSimpleSystemsManagementClientBuilder;
 import com.amazonaws.services.simplesystemsmanagement.model.GetParametersByPathRequest;
 import com.amazonaws.services.simplesystemsmanagement.model.GetParametersByPathResult;
 import com.amazonaws.services.simplesystemsmanagement.model.Parameter;
 import com.amazonaws.services.sns.AmazonSNS;
-import com.amazonaws.services.sns.AmazonSNSClient;
-import com.amazonaws.services.sns.model.MessageAttributeValue;
+import com.amazonaws.services.sns.AmazonSNSClientBuilder;
 import com.amazonaws.services.sns.model.PublishRequest;
-import com.amazonaws.services.sns.model.PublishResult;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -41,27 +28,27 @@ import com.google.gson.GsonBuilder;
  *
  */
 
-public class ReadingNotificationConfig implements RequestHandler<Object, Object> {
+public class PublishNotificationConfig implements RequestHandler<Object, Object> {
 	Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	String url = "";
 	String username = "";
 	String password = "";
+	String snstopic = "";
 	Connection conn;
-	AmazonSNS snsClient = AmazonSNSClient.builder().build();
-	Map<String, MessageAttributeValue> smsAttributes = new HashMap<String, MessageAttributeValue>();
-    private String from = "youremail";
+	AmazonSNS client = AmazonSNSClientBuilder.defaultClient();
 	
     public Object handleRequest(Object input,Context context) {
 		LambdaLogger logger = context.getLogger();
 		try {   
-			smsAttributes.put("AWS.SNS.SMS.SenderID", new MessageAttributeValue().withStringValue("+971XXXXXXXXX").withDataType("String"));
 			getAWSSSMParameter(logger);
 			conn = DriverManager.getConnection(url, username, password);
 			Statement stmt = conn.createStatement();
 			ResultSet resultSet = stmt.executeQuery("select id,name,message,mobile_no,email,subject from notification_config where month(dob)=month(sysdate()) and day(dob)=day(sysdate());");
+			StringBuilder sb = new StringBuilder();
 			while (resultSet.next()) {
-				//sendSMSMessage(resultSet.getString("message"), "+"+resultSet.getString("mobile_no"),logger); for sending SMSs	
-				sendEmail(resultSet.getString("message"), resultSet.getString("email"), resultSet.getString("subject"), logger);
+				sb = new StringBuilder();
+				sb.append(resultSet.getString("message")).append("#").append(resultSet.getString("email")).append("#").append(resultSet.getString("subject")).append("#").append(resultSet.getString("mobile_no"));
+				sendMessagesSNS(logger,sb.toString());
 			}
 			logger.log("Successfully executed query");
 
@@ -96,44 +83,21 @@ public class ReadingNotificationConfig implements RequestHandler<Object, Object>
 	    		if("/config/notification/spring.datasource.username".equals(p.getName())){
 	    			username = p.getValue();
 	    		}
+	    		if("/config/notification/sns.topic.name".equals(p.getName())){
+	    			snstopic = p.getValue();
+	    		}
 	    	}
 	    }
 	    
 	}
 	
 	
-	/*private void sendMessagesSQS(List<SendMessageBatchRequestEntry> messages){
-		AmazonSQS sqs = AmazonSQSClientBuilder.defaultClient();
-		String queueUrl = sqs.getQueueUrl("firstqueue").getQueueUrl();
-		SendMessageBatchRequest send_batch_request = new SendMessageBatchRequest()
-		        .withQueueUrl(queueUrl)
-		        .withEntries(messages);
-		sqs.sendMessageBatch(send_batch_request);
+	private void sendMessagesSNS(LambdaLogger logger,String message){
+		final PublishRequest publishRequest = new PublishRequest(snstopic, message);
+	    client.publish(publishRequest);
+		logger.log(" publishing message ");
 
-	}*/
-	
-	private  void sendSMSMessage( String message, String phoneNumber,LambdaLogger logger) {
-	        PublishResult result = snsClient.publish(new PublishRequest()
-	        		
-	                        .withMessage(message)
-	                        .withPhoneNumber(phoneNumber)
-	                        .withMessageAttributes(smsAttributes));
-	        logger.log("MessageId:"+result.getMessageId()); // Prints the message ID.
 	}
 	
-	private void sendEmail(String message,String toEmail,String subject,LambdaLogger logger){
-		AmazonSimpleEmailService client = AmazonSimpleEmailServiceClientBuilder.standard().withRegion(Regions.US_WEST_2).build();
-		SendEmailRequest request = new SendEmailRequest()
-				.withDestination(
-						new Destination().withToAddresses(toEmail))
-				.withMessage(new Message()
-						.withSubject(new Content().withCharset("UTF-8").withData(subject))
-						.withBody(new Body()
-				                  .withHtml(new Content()
-				                      .withCharset("UTF-8").withData(message))))
-				.withSource(from);
-		client.sendEmail(request);
-		System.out.println("Email sent!");
-	}
 	
 }
