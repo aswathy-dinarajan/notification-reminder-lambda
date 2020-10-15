@@ -5,6 +5,6 @@ This will query  the AWS RDS table where the events, messages, mobile no,etc are
 /notification-config and  http://aswathy-dinarajan/notification-config-backend projects)
 The DB credentials will be retried from AWSParameter store
 and retrieve only those records which matches the current date and month.
-The matched records columns will be pushed to an SNS topic
+The matched records columns will be pushed to an SNS topic(this topic will be subscribed by two different lambda functions one to send email another to send SMS)
 
 Technologies used : AWS Lambda, aws sdk, Maven, Java 8,AWS SNS,AWS Parameter store
